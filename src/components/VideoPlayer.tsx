@@ -409,12 +409,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
 
             {/* Controls Row */}
-            <div className="flex items-center justify-between text-white text-xs pt-1">
+            <div className="flex items-center justify-between gap-2 text-white text-xs pt-1">
               {/* Left group */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 sm:gap-3 min-w-0">
                 <button
                   onClick={togglePlay}
-                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
                   aria-label={isPlaying ? 'Pause' : 'Lecture'}
                 >
                   {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
@@ -441,7 +441,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 {onNextEpisode && (
                   <button
                     onClick={onNextEpisode}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-medium border border-purple-500/30 transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-medium border border-purple-500/30 transition-colors shrink-0"
                     title="Épisode suivant"
                   >
                     <SkipForward className="w-3.5 h-3.5" />
@@ -465,21 +465,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     step="0.05"
                     value={isMuted ? 0 : volume}
                     onChange={handleVolumeChange}
-                    className="w-16 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    className="hidden sm:block w-16 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
                     aria-label="Volume"
                   />
                 </div>
 
                 {/* Time Display */}
-                <div className="text-[11px] text-zinc-400 tabular-nums font-mono pl-1">
+                <div className="text-[11px] text-zinc-400 tabular-nums font-mono pl-0.5 truncate">
                   <span>{formatTime(currentTime)}</span>
-                  <span className="mx-1">/</span>
+                  <span className="mx-0.5">/</span>
                   <span>{formatTime(duration)}</span>
                 </div>
               </div>
 
               {/* Right group */}
-              <div className="flex items-center gap-2 relative">
+              <div className="flex items-center gap-1 sm:gap-2 relative shrink-0">
                 {/* Subtitles Menu Trigger */}
                 <div className="relative">
                   <button

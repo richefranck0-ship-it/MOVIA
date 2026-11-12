@@ -37,15 +37,15 @@ export interface MediaItem {
   releaseYear: number;
   releaseDate: string;
   genres: string[];
-  rating: number; // e.g. 8.7 / 10
+  rating: number;
   votesCount?: number;
-  duration: string; // "2h 46m" or "4 Saisons"
+  duration: string;
   country: string;
   language: string;
   director?: string;
   cast: CastMember[];
-  trailerUrl: string; // YouTube embed or video URL
-  videoUrl: string; // playable MP4 or HLS or public domain video
+  trailerUrl: string;
+  videoUrl: string;
   qualities?: { label: string; src: string }[];
   seasons?: Season[];
   isFeatured?: boolean;
@@ -62,7 +62,7 @@ export interface LiveStreamChannel {
   name: string;
   category: string;
   logo: string;
-  streamUrl: string; // MP4, HLS/M3U8 or YouTube
+  streamUrl: string;
   format: 'mp4' | 'hls' | 'youtube';
   description: string;
   viewersCount: number;
@@ -71,16 +71,25 @@ export interface LiveStreamChannel {
   customAdded?: boolean;
 }
 
-export type AdPlacement = 'header_bar' | 'sub_hero' | 'in_feed' | 'under_player' | 'sidebar' | 'detail_modal' | 'direct_feed' | 'footer_network';
+export type AdPlacement =
+  | 'header_bar'
+  | 'sub_hero'
+  | 'in_feed'
+  | 'under_player'
+  | 'sidebar'
+  | 'detail_modal'
+  | 'direct_feed'
+  | 'footer_network';
 
 export interface AdBanner {
   id: string;
   clientName: string;
   title: string;
   description?: string;
-  mediaType: 'image' | 'video'; // image or video ad link
-  mediaUrl: string; // image URL or MP4/WebM video URL
-  imageUrl?: string; // optional poster image
+  mediaType: 'image' | 'video' | 'html';
+  mediaUrl: string;
+  imageUrl?: string;
+  htmlCode?: string;
   targetUrl: string;
   placement: AdPlacement;
   isActive: boolean;
@@ -96,8 +105,8 @@ export interface UserHistoryItem {
   episodeId?: string;
   title: string;
   poster: string;
-  timestamp: number; // in seconds
-  duration: number; // in seconds
+  timestamp: number;
+  duration: number;
   progressPercent: number;
   lastWatched: string;
   type: MediaType;
@@ -136,4 +145,38 @@ export interface ContentReport {
   status: 'pending' | 'resolved';
 }
 
-export type ActiveTab = 'home' | 'direct' | 'movies' | 'series' | 'news' | 'watchlist' | 'history' | 'admin';
+export interface PushNotificationHistoryItem {
+  id: string;
+  title: string;
+  message: string;
+  image?: string;
+  link?: string;
+  sentAt: string;
+  targetedCount: number;
+  deliveredCount: number;
+  failedCount: number;
+}
+
+export interface PartnershipInquiry {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  placementInterest?: string;
+  message: string;
+  createdAt: string;
+  status: 'new' | 'reviewed';
+}
+
+export type ActiveTab =
+  | 'home'
+  | 'direct'
+  | 'movies'
+  | 'series'
+  | 'news'
+  | 'watchlist'
+  | 'partenariat'
+  | 'movie'
+  | 'series_detail'
+  | 'episode'
+  | 'admin';

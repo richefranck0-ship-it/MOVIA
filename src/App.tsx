@@ -11,88 +11,183 @@ import { HeroBanner } from './components/HeroBanner';
 import { MediaRow } from './components/MediaRow';
 import { MediaCard } from './components/MediaCard';
 import { VideoPlayer } from './components/VideoPlayer';
-import { MediaDetailModal } from './components/MediaDetailModal';
+import { MediaDetailPage } from './components/MediaDetailPage';
 import { CatalogView } from './components/CatalogView';
 import { LiveDirectView } from './components/LiveDirectView';
 import { SearchModal } from './components/SearchModal';
 import { UserSpaceModal } from './components/UserSpaceModal';
-import { AdminModal } from './components/AdminModal';
+import { PartnershipPage } from './components/PartnershipPage';
+import { AdminPage } from './components/AdminPage';
 import { AdBannerSlot } from './components/AdBannerSlot';
 import { AdNetworkBanners } from './components/AdNetworkBanners';
 import { Footer } from './components/Footer';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { PushPromptBanner } from './components/PushPromptBanner';
 import { tmdbService } from './services/tmdbService';
-import { Film, Sparkles, Bookmark, Flame, Loader2 } from 'lucide-react';
+import {
+  getEpisodePath,
+  getMediaPath,
+  getTabPath,
+  parsePathname,
+  ParsedRoute,
+} from './utils/routing';
+import { useSeoMeta } from './utils/seo';
+import { getCurrentLang, getLocalizedPath, getSeoRouteCopy } from './utils/i18n';
+import { Sparkles, Bookmark, Flame, Radio } from 'lucide-react';
+
+const HOME_CATEGORIES: { label: string; genre: string; target: ActiveTab; isDirect?: boolean }[] = [
+  { label: 'Tout', genre: 'Tous', target: 'home' },
+  { label: 'Direct Live', genre: 'Tous', target: 'direct', isDirect: true },
+  { label: 'Films Populaires', genre: 'Tous', target: 'movies' },
+  { label: 'Séries TV', genre: 'Tous', target: 'series' },
+  { label: 'Action', genre: 'Action', target: 'movies' },
+  { label: 'Science-Fiction', genre: 'Science-Fiction', target: 'movies' },
+  { label: 'Comédie', genre: 'Comédie', target: 'movies' },
+  { label: 'Drame', genre: 'Drame', target: 'movies' },
+  { label: 'Horreur', genre: 'Horreur', target: 'movies' },
+  { label: 'Animation', genre: 'Animation', target: 'movies' },
+  { label: 'Thriller', genre: 'Thriller', target: 'movies' },
+];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
+  const [route, setRoute] = useState<ParsedRoute>(() => parsePathname(window.location.pathname));
+  const [selectedCatalogGenre, setSelectedCatalogGenre] = useState<string>('Tous');
   const [mediaList, setMediaList] = useState<MediaItem[]>(() => storageService.getMediaCatalog());
   const [user, setUser] = useState<UserProfile>(() => storageService.getUserProfile());
-  const [isLiveLoadingTmdb, setIsLiveLoadingTmdb] = useState(false);
 
-  // Modals & Active Viewers
+  // Overlay Modals
   const [activeMediaForPlayer, setActiveMediaForPlayer] = useState<MediaItem | null>(null);
   const [activeEpisodeForPlayer, setActiveEpisodeForPlayer] = useState<Episode | undefined>(undefined);
-  const [activeMediaForDetails, setActiveMediaForDetails] = useState<MediaItem | null>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [userSpaceOpen, setUserSpaceOpen] = useState(false);
   const [userSpaceInitialTab, setUserSpaceInitialTab] = useState<'profile' | 'watchlist' | 'history'>('watchlist');
-  const [adminModalOpen, setAdminModalOpen] = useState(false);
 
-  // Auto-populate entire catalog directly from TMDB API on mount
+  // Sync browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      setRoute(parsePathname(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToPath = useCallback((path: string) => {
+    const cleanPath = (path.split('?')[0] || '/');
+    const activeLang = getCurrentLang();
+    const localized = getLocalizedPath(cleanPath, activeLang);
+    const currentFull = `${window.location.pathname}${window.location.search}`;
+    if (currentFull !== localized) {
+      window.history.pushState({}, '', localized);
+    }
+    setRoute(parsePathname(cleanPath));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const navigateToTab = useCallback(
+    (tab: ActiveTab, genre = 'Tous') => {
+      setSelectedCatalogGenre(genre);
+      navigateToPath(getTabPath(tab));
+    },
+    [navigateToPath]
+  );
+
+  const navigateToMedia = useCallback(
+    (media: MediaItem) => {
+      navigateToPath(getMediaPath(media));
+    },
+    [navigateToPath]
+  );
+
+  const navigateToEpisode = useCallback(
+    (series: MediaItem, episode: Episode) => {
+      navigateToPath(getEpisodePath(series, episode));
+    },
+    [navigateToPath]
+  );
+
+  // International SEO Meta for top-level list routes
+  const activeLang = getCurrentLang();
+  useSeoMeta(
+    useMemo(() => {
+      const copy = getSeoRouteCopy(route.tab, activeLang);
+      return {
+        title: copy.title,
+        description: copy.description,
+        path: getTabPath(route.tab),
+        lang: activeLang,
+      };
+    }, [route.tab, activeLang])
+  );
+
+  // Load live TMDB catalog + server custom items on mount
   useEffect(() => {
     let isCancelled = false;
-    const loadLiveTmdbCatalog = async () => {
-      setIsLiveLoadingTmdb(true);
+    const loadCatalog = async () => {
       try {
-        const [trend, popM, nowPlaying, classics, popTv, classicTv, topRated] = await Promise.all([
-          tmdbService.getTrending('all'),
-          tmdbService.getPopularMovies(),
-          tmdbService.getNowPlayingMovies(),
-          tmdbService.getClassicMovies(),
-          tmdbService.getPopularTv(),
-          tmdbService.getClassicTv(),
-          tmdbService.getTopRatedMovies(),
-        ]);
+        const [trend, popM, nowPlaying, classics, popTv, classicTv, topRated, customRes, adsRes] =
+          await Promise.all([
+            tmdbService.getTrending('all'),
+            tmdbService.getPopularMovies(),
+            tmdbService.getNowPlayingMovies(),
+            tmdbService.getClassicMovies(),
+            tmdbService.getPopularTv(),
+            tmdbService.getClassicTv(),
+            tmdbService.getTopRatedMovies(),
+            fetch('/api/catalog/custom').then((r) => (r.ok ? r.json() : { items: [] })).catch(() => ({ items: [] })),
+            fetch('/api/ads').then((r) => (r.ok ? r.json() : { ads: null })).catch(() => ({ ads: null })),
+          ]);
 
-        if (!isCancelled) {
-          const combined = [...trend, ...popM, ...nowPlaying, ...classics, ...popTv, ...classicTv, ...topRated];
-          const map = new Map<string, MediaItem>();
+        if (isCancelled) return;
+        if (Array.isArray(adsRes?.ads)) {
+          storageService.saveAds(adsRes.ads);
+        }
+        const map = new Map<string, MediaItem>();
 
-          // Keep user custom added items
-          const currentCatalog = storageService.getMediaCatalog();
-          currentCatalog.filter(m => m.customAdded).forEach(m => map.set(String(m.id), m));
+        if (Array.isArray(customRes.items)) {
+          customRes.items.forEach((m: MediaItem) => map.set(String(m.id), m));
+        }
 
-          // Add live TMDB items
-          combined.forEach(item => {
+        storageService
+          .getMediaCatalog()
+          .filter((m) => m.customAdded)
+          .forEach((m) => {
+            if (!map.has(String(m.id))) map.set(String(m.id), m);
+          });
+
+        [...trend, ...popM, ...nowPlaying, ...classics, ...popTv, ...classicTv, ...topRated].forEach(
+          (item) => {
             if (!map.has(String(item.id))) {
               map.set(String(item.id), item);
             }
-          });
-
-          // Ensure at least first item is featured
-          const list = Array.from(map.values());
-          if (list.length > 0 && !list.some(m => m.isFeatured)) {
-            list[0].isFeatured = true;
           }
+        );
 
-          storageService.saveMediaCatalog(list);
-          setMediaList(list);
+        const list = Array.from(map.values());
+        if (list.length > 0 && !list.some((m) => m.isFeatured)) {
+          list[0].isFeatured = true;
         }
+        storageService.saveMediaCatalog(list);
+        setMediaList(list);
       } catch (err) {
-        console.error('Failed to auto-populate from TMDB:', err);
-      } finally {
-        if (!isCancelled) setIsLiveLoadingTmdb(false);
+        console.error('Failed to auto-populate catalog:', err);
       }
     };
 
-    loadLiveTmdbCatalog();
-    return () => { isCancelled = true; };
+    loadCatalog();
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
-  // Record page view on tab change
+  // Record page view locally & on server
   useEffect(() => {
-    storageService.recordPageView(activeTab);
-  }, [activeTab]);
+    storageService.recordPageView(route.tab);
+    fetch('/api/traffic/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'pageview' }),
+    }).catch(() => {});
+  }, [route.tab, route.movieSlugOrId, route.seriesSlugOrId, route.episodeId]);
 
   const refreshCatalog = useCallback(() => {
     setMediaList(storageService.getMediaCatalog());
@@ -102,29 +197,35 @@ export default function App() {
     setUser(storageService.getUserProfile());
   }, []);
 
-  // Filtered Media Sets for Home Sections
+  // Home Sections
   const featuredItems = useMemo(() => {
-    const featured = mediaList.filter(m => m.isFeatured);
-    return featured.length > 0 ? featured : mediaList.slice(0, 3);
+    const featured = mediaList.filter((m) => m.isFeatured);
+    return featured.length > 0 ? featured : mediaList.slice(0, 4);
   }, [mediaList]);
 
-  const trendingItems = useMemo(() => mediaList.filter(m => m.isTrending), [mediaList]);
-  const popularMovies = useMemo(() => mediaList.filter(m => m.type === 'movie' && (m.votesCount || 0) > 3000), [mediaList]);
-  const newReleases = useMemo(() => mediaList.filter(m => m.releaseYear >= 2023 || m.isNew), [mediaList]);
-  const classicFilms = useMemo(() => mediaList.filter(m => m.type === 'movie' && (m.releaseYear < 2000 || m.isClassic)), [mediaList]);
-  const popularSeries = useMemo(() => mediaList.filter(m => m.type === 'tv'), [mediaList]);
-  const classicSeries = useMemo(() => mediaList.filter(m => m.type === 'tv' && (m.releaseYear < 2015 || m.isClassic)), [mediaList]);
-  const topRatedItems = useMemo(() => mediaList.filter(m => m.rating >= 8.5), [mediaList]);
-  const editorialRecommendations = useMemo(() => [...mediaList].sort(() => 0.5 - Math.random()).slice(0, 8), [mediaList]);
+  const trendingItems = useMemo(() => mediaList.filter((m) => m.isTrending), [mediaList]);
+  const popularMovies = useMemo(
+    () => mediaList.filter((m) => m.type === 'movie' && (m.votesCount || 0) > 2000),
+    [mediaList]
+  );
+  const newReleases = useMemo(
+    () => mediaList.filter((m) => m.releaseYear >= 2023 || m.isNew),
+    [mediaList]
+  );
+  const classicFilms = useMemo(
+    () => mediaList.filter((m) => m.type === 'movie' && (m.releaseYear < 2000 || m.isClassic)),
+    [mediaList]
+  );
+  const popularSeries = useMemo(() => mediaList.filter((m) => m.type === 'tv'), [mediaList]);
+  const topRatedItems = useMemo(() => mediaList.filter((m) => m.rating >= 8.3), [mediaList]);
 
-  // Player launchers
   const handlePlayMedia = (media: MediaItem, episodeOrId?: Episode | string) => {
     setActiveMediaForPlayer(media);
     if (typeof episodeOrId === 'string') {
       let found: Episode | undefined;
       if (media.seasons) {
         for (const s of media.seasons) {
-          found = s.episodes.find(e => e.id === episodeOrId);
+          found = s.episodes.find((e) => e.id === episodeOrId);
           if (found) break;
         }
       }
@@ -132,17 +233,18 @@ export default function App() {
     } else {
       setActiveEpisodeForPlayer(episodeOrId);
     }
-    // If detail modal was open, close it
-    setActiveMediaForDetails(null);
+    fetch('/api/traffic/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'stream', title: media.title }),
+    }).catch(() => {});
   };
 
   const handleNextEpisode = () => {
     if (!activeMediaForPlayer || activeMediaForPlayer.type !== 'tv' || !activeMediaForPlayer.seasons) return;
-
-    // Find current season and episode
     for (const s of activeMediaForPlayer.seasons) {
       if (activeEpisodeForPlayer && s.seasonNumber === activeEpisodeForPlayer.seasonNumber) {
-        const nextEpIndex = s.episodes.findIndex(e => e.id === activeEpisodeForPlayer.id) + 1;
+        const nextEpIndex = s.episodes.findIndex((e) => e.id === activeEpisodeForPlayer.id) + 1;
         if (nextEpIndex < s.episodes.length) {
           setActiveEpisodeForPlayer(s.episodes[nextEpIndex]);
           return;
@@ -161,15 +263,15 @@ export default function App() {
       releaseDate: new Date().toISOString().split('T')[0],
       rating: 9.8,
       genres: ['Direct TV', channel.category],
-      duration: 'En direct 24/7',
-      country: 'Live Streaming',
-      language: 'Direct TV (VF/VO)',
+      duration: 'Direct 24/7',
+      country: 'Live',
+      language: 'Direct',
       cast: [],
-      synopsis: channel.description || `Diffusion continue en direct. Format: ${channel.format.toUpperCase()} (${channel.qualityBadge || '1080p FHD'}).`,
-      poster: channel.logo,
-      backdrop: channel.logo,
+      synopsis: channel.description || 'Flux vidéo direct STREAMORA.',
+      poster: channel.logo || '/images/fallback-poster.jpg',
+      backdrop: channel.logo || '/images/fallback-backdrop.jpg',
       videoUrl: channel.streamUrl,
-      trailerUrl: channel.streamUrl,
+      trailerUrl: '',
       isFeatured: false,
     };
     handlePlayMedia(channelMedia);
@@ -180,202 +282,190 @@ export default function App() {
     setUserSpaceOpen(true);
   };
 
-  const handleOpenDetails = (media: MediaItem) => {
-    setActiveMediaForDetails(media);
-  };
+  const isPrivateAdmin = route.tab === 'admin';
 
   return (
-    <div className="min-h-screen bg-[#08070d] text-[#f3f3f7] flex flex-col font-sans selection:bg-purple-600 selection:text-white">
-      {/* Optional Discreet Header Sponsor Bar */}
-      <AdBannerSlot placement="header_bar" />
+    <div className="min-h-screen bg-[#08070d] text-[#f3f3f7] flex flex-col font-sans selection:bg-purple-600 selection:text-white overflow-x-hidden">
+      {!isPrivateAdmin && <AdBannerSlot placement="header_bar" />}
 
-      {/* Top Navbar */}
-      <Navbar
-        activeTab={activeTab}
-        onNavigate={setActiveTab}
-        onOpenSearch={() => setSearchModalOpen(true)}
-        onOpenUserSpace={handleOpenUserSpace}
-        onOpenAdmin={() => setAdminModalOpen(true)}
-        user={user}
-      />
+      {!isPrivateAdmin && (
+        <Navbar
+          activeTab={route.tab}
+          onNavigate={(tab) => navigateToTab(tab)}
+          onOpenSearch={() => setSearchModalOpen(true)}
+          onOpenUserSpace={handleOpenUserSpace}
+          user={user}
+        />
+      )}
 
-      {/* Main View Area */}
+      <OfflineIndicator />
+
       <main className="flex-1">
-        {/* VIEW 1: HOME PAGE */}
-        {activeTab === 'home' && (
-          <div className="space-y-6">
-            {/* Hero Banner */}
+        {/* HOME VIEW (MovieBox Layout + Mobile-First) */}
+        {route.tab === 'home' && (
+          <div className="space-y-4">
             <HeroBanner
               featuredItems={featuredItems}
               onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              onOpenDetails={navigateToMedia}
+              onOpenDirect={() => navigateToTab('direct')}
               onWatchlistChange={refreshUser}
             />
 
-            {/* Sub-hero Ad Placement (Image or Video) */}
-            <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-2">
+            {/* MovieBox-style Horizontal Category Strip */}
+            <section aria-label="Catégories rapides" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+                {HOME_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.label}
+                    onClick={() => navigateToTab(cat.target, cat.genre)}
+                    className={`px-4 min-h-[40px] rounded-xl border text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1.5 ${
+                      cat.isDirect
+                        ? 'bg-rose-500/15 hover:bg-rose-600 border-rose-500/35 text-rose-200 hover:text-white'
+                        : 'bg-[#141122] hover:bg-purple-600 border-white/8 hover:border-purple-500 text-zinc-200 hover:text-white'
+                    }`}
+                  >
+                    {cat.isDirect && <Radio className="w-3.5 h-3.5 text-rose-400" />}
+                    <span>{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Discreet Sub-Hero Ad Placement */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <AdBannerSlot placement="sub_hero" />
             </div>
 
-            {/* Quick Resume bar if user has recent in-progress streams */}
+            {/* Resume Watching */}
             {user.history.length > 0 && (
-              <div className="max-w-7xl mx-auto px-4 md:px-8 pt-4">
-                <div className="bg-[#12101e] border border-purple-900/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="bg-[#12101e] border border-purple-900/35 rounded-2xl p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-300 flex items-center justify-center shrink-0">
                       <Flame className="w-5 h-5" />
                     </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-400 uppercase font-semibold">Reprendre la lecture</span>
-                      <h4 className="text-sm font-bold text-white line-clamp-1">{user.history[0].title}</h4>
-                      <p className="text-[11px] text-zinc-400">Progression : {user.history[0].progressPercent}%</p>
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-zinc-400 uppercase font-semibold block">
+                        Reprendre
+                      </span>
+                      <h3 className="text-sm font-bold text-white truncate">{user.history[0].title}</h3>
                     </div>
                   </div>
                   <button
                     onClick={() => {
-                      const media = mediaList.find(m => String(m.id) === String(user.history[0].mediaId));
-                      if (media) handlePlayMedia(media);
+                      const media = mediaList.find(
+                        (m) => String(m.id) === String(user.history[0].mediaId)
+                      );
+                      if (media) navigateToMedia(media);
                     }}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold self-end sm:self-center transition-colors"
+                    className="px-4 min-h-[40px] bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold shrink-0"
                   >
-                    Reprendre maintenant
+                    Ouvrir
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Section 1: Tendances du moment */}
             <MediaRow
               title="Tendances du moment"
-              subtitle="Les films et séries les plus regardés aujourd'hui sur STREAMORA"
+              subtitle="Les titres les plus recherchés aujourd’hui"
               items={trendingItems}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              onOpenDetails={navigateToMedia}
               onWatchlistChange={refreshUser}
+              onSeeAll={() => navigateToTab('movies')}
             />
 
-            {/* Section 2: Films populaires */}
             <MediaRow
               title="Films populaires"
-              subtitle="Les grands succès cinématographiques acclamés par le public"
+              subtitle="Succès du box-office et incontournables"
               items={popularMovies}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              onOpenDetails={navigateToMedia}
               onWatchlistChange={refreshUser}
+              onSeeAll={() => navigateToTab('movies')}
             />
 
-            {/* Discreet In-Feed Ad Banner (Slot 1) */}
-            <div className="max-w-7xl mx-auto px-4 md:px-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <AdBannerSlot placement="in_feed" />
             </div>
 
-            {/* Section 3: Nouveautés cinéma & récemment ajoutés */}
             <MediaRow
-              title="Nouveautés cinéma & récentes sorties"
-              subtitle="Les dernières pépites arrivées au catalogue"
+              title="Nouveautés"
+              subtitle="Sorties récentes cinéma et plateformes"
               items={newReleases}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              onOpenDetails={navigateToMedia}
               onWatchlistChange={refreshUser}
+              onSeeAll={() => navigateToTab('news')}
             />
 
-            {/* Section 4: Films classiques incontournables */}
             <MediaRow
-              title="Films classiques & Chefs-d'œuvre"
-              subtitle="Des années 1940 aux années 1990 : l'histoire du cinéma mondial à portée de clic"
-              items={classicFilms}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
-              onWatchlistChange={refreshUser}
-            />
-
-            {/* Section 5: Séries populaires intégrales */}
-            <MediaRow
-              title="Séries populaires intégrales"
-              subtitle="Des sagas télévisuelles cultes à visionner saison par saison"
+              title="Séries populaires"
+              subtitle="Saisons et épisodes avec liens directs"
               items={popularSeries}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              onOpenDetails={navigateToMedia}
               onWatchlistChange={refreshUser}
+              onSeeAll={() => navigateToTab('series')}
             />
 
-            {/* Section 6: Séries classiques cultes */}
             <MediaRow
-              title="Séries cultes & classiques"
-              subtitle="Les œuvres qui ont révolutionné le petit écran"
-              items={classicSeries}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              title="Grands classiques du cinéma"
+              subtitle="Chefs-d’œuvre intemporels et patrimoine"
+              items={classicFilms}
+              onOpenDetails={navigateToMedia}
               onWatchlistChange={refreshUser}
+              onSeeAll={() => navigateToTab('movies')}
             />
 
-            {/* Section 7: Films les mieux notés (Top Rated) */}
             <MediaRow
-              title="Les mieux notés par la critique (⭐ 8.5+)"
-              subtitle="Les plus hautes distinctions et notes d'évaluation du 7ème art"
+              title="Les mieux notés"
+              subtitle="Acclamés par la critique et le public"
               items={topRatedItems}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
-              onWatchlistChange={refreshUser}
-            />
-
-            {/* Section 8: Recommandations de la rédaction */}
-            <MediaRow
-              title="Recommandations STREAMORA"
-              subtitle="Sélectionnées pour vous par nos programmateurs de cinéma"
-              items={editorialRecommendations}
-              onPlay={handlePlayMedia}
-              onOpenDetails={handleOpenDetails}
+              onOpenDetails={navigateToMedia}
               onWatchlistChange={refreshUser}
             />
           </div>
         )}
 
-        {/* VIEW 2: MOVIES DEDICATED CATALOG */}
-        {activeTab === 'movies' && (
+        {/* MOVIES CATALOG */}
+        {route.tab === 'movies' && (
           <CatalogView
             type="movie"
             allMedia={mediaList}
-            onPlay={handlePlayMedia}
-            onOpenDetails={handleOpenDetails}
+            initialGenre={selectedCatalogGenre}
+            onOpenDetails={navigateToMedia}
             onWatchlistChange={refreshUser}
           />
         )}
 
-        {/* VIEW 3: SERIES DEDICATED CATALOG */}
-        {activeTab === 'series' && (
+        {/* SERIES CATALOG */}
+        {route.tab === 'series' && (
           <CatalogView
             type="tv"
             allMedia={mediaList}
-            onPlay={handlePlayMedia}
-            onOpenDetails={handleOpenDetails}
+            initialGenre={selectedCatalogGenre}
+            onOpenDetails={navigateToMedia}
             onWatchlistChange={refreshUser}
           />
         )}
 
-        {/* VIEW 4: NEWS (Nouveautés) */}
-        {activeTab === 'news' && (
-          <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-6">
+        {/* NEWS */}
+        {route.tab === 'news' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4" />
-                <span>Nouveautés & Sorties Récentes</span>
+                <span>Nouveautés</span>
               </span>
-              <h1 className="text-3xl font-extrabold text-white font-heading">
-                Les Dernières Sorties Cinéma & Séries
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-heading">
+                Dernières Sorties Films &amp; Séries
               </h1>
-              <p className="text-xs text-zinc-400 max-w-xl">
-                Restez à l'affût des productions de 2024 et 2025 ajoutées sur la plateforme.
-              </p>
             </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {newReleases.map(item => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+              {newReleases.map((item) => (
                 <MediaCard
                   key={item.id}
                   media={item}
-                  onPlay={handlePlayMedia}
-                  onOpenDetails={handleOpenDetails}
+                  onOpenDetails={navigateToMedia}
                   onWatchlistChange={refreshUser}
                 />
               ))}
@@ -383,70 +473,109 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 5: WATCHLIST DIRECT TAB */}
-        {activeTab === 'watchlist' && (
-          <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-6">
+        {/* WATCHLIST */}
+        {route.tab === 'watchlist' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Bookmark className="w-4 h-4" />
-                <span>Espace Personnel</span>
+                <span>Favoris</span>
               </span>
-              <h1 className="text-3xl font-extrabold text-white font-heading">
-                Ma Liste de Films & Séries
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-heading">
+                Ma Liste
               </h1>
-              <p className="text-xs text-zinc-400">
-                Vos titres enregistrés pour les regarder à tout moment.
-              </p>
             </div>
-
-            {mediaList.filter(m => user.watchlist.some(id => String(id) === String(m.id))).length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {mediaList.filter((m) => user.watchlist.some((id) => String(id) === String(m.id))).length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
                 {mediaList
-                  .filter(m => user.watchlist.some(id => String(id) === String(m.id)))
-                  .map(item => (
+                  .filter((m) => user.watchlist.some((id) => String(id) === String(m.id)))
+                  .map((item) => (
                     <MediaCard
                       key={item.id}
                       media={item}
-                      onPlay={handlePlayMedia}
-                      onOpenDetails={handleOpenDetails}
+                      onOpenDetails={navigateToMedia}
                       onWatchlistChange={refreshUser}
                     />
                   ))}
               </div>
             ) : (
-              <div className="py-20 text-center bg-[#110f1c] rounded-2xl border border-white/5 space-y-3">
-                <Bookmark className="w-12 h-12 text-zinc-600 mx-auto" />
-                <h3 className="text-lg font-semibold text-white">Votre liste est vide pour le moment</h3>
-                <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                  Explorez le catalogue et cliquez sur « + » pour ajouter des films et séries à votre liste personnelle.
-                </p>
+              <div className="py-16 text-center bg-[#110f1c] rounded-2xl border border-white/6 space-y-3">
+                <Bookmark className="w-10 h-10 text-zinc-600 mx-auto" />
+                <p className="text-sm font-semibold text-white">Votre liste est vide</p>
                 <button
-                  onClick={() => setActiveTab('home')}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition-colors"
+                  onClick={() => navigateToTab('home')}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl"
                 >
-                  Découvrir le catalogue
+                  Explorer le catalogue
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {/* VIEW 6: DIRECT & CHAÎNES LIVE (MP4 / HLS / YOUTUBE) */}
-        {activeTab === 'direct' && (
-          <LiveDirectView onPlayDirectStream={handlePlayDirectChannel} />
+        {/* DIRECT */}
+        {route.tab === 'direct' && <LiveDirectView onPlayDirectStream={handlePlayDirectChannel} />}
+
+        {/* PARTNERSHIP & ADVERTISING PAGE */}
+        {route.tab === 'partenariat' && <PartnershipPage />}
+
+        {/* DIRECT DETAIL PAGES (/movie/:id, /series/:id, /episode/:id) */}
+        {route.tab === 'movie' && route.movieSlugOrId && (
+          <MediaDetailPage
+            mode="movie"
+            param={route.movieSlugOrId}
+            allMedia={mediaList}
+            onBackHome={() => navigateToTab('home')}
+            onNavigateMedia={navigateToMedia}
+            onNavigateEpisode={navigateToEpisode}
+            onPlay={handlePlayMedia}
+            onWatchlistChange={refreshUser}
+          />
+        )}
+
+        {route.tab === 'series_detail' && route.seriesSlugOrId && (
+          <MediaDetailPage
+            mode="series"
+            param={route.seriesSlugOrId}
+            allMedia={mediaList}
+            onBackHome={() => navigateToTab('home')}
+            onNavigateMedia={navigateToMedia}
+            onNavigateEpisode={navigateToEpisode}
+            onPlay={handlePlayMedia}
+            onWatchlistChange={refreshUser}
+          />
+        )}
+
+        {route.tab === 'episode' && route.episodeId && (
+          <MediaDetailPage
+            mode="episode"
+            param={route.episodeId}
+            allMedia={mediaList}
+            onBackHome={() => navigateToTab('home')}
+            onNavigateMedia={navigateToMedia}
+            onNavigateEpisode={navigateToEpisode}
+            onPlay={handlePlayMedia}
+            onWatchlistChange={refreshUser}
+          />
+        )}
+
+        {/* PRIVATE ADMIN ROUTE (/admin ONLY) */}
+        {route.tab === 'admin' && (
+          <AdminPage
+            mediaList={mediaList}
+            onRefreshMedia={refreshCatalog}
+            onExitAdmin={() => navigateToTab('home')}
+          />
         )}
       </main>
 
-      {/* Bottom Ad Network & Banners Section ("ajout en bas aficher ses pubs et places banniers pours les regies publicitaire") */}
-      <AdNetworkBanners />
+      {!isPrivateAdmin && route.tab !== 'partenariat' && (
+        <AdNetworkBanners onOpenPartnership={() => navigateToTab('partenariat')} />
+      )}
+      {!isPrivateAdmin && <Footer onNavigate={(tab) => navigateToTab(tab)} />}
+      {!isPrivateAdmin && <PushPromptBanner />}
 
-      {/* Footer */}
-      <Footer
-        onNavigate={setActiveTab}
-        onOpenAdmin={() => setAdminModalOpen(true)}
-      />
-
-      {/* Video Player Modal */}
+      {/* Video Player Overlay */}
       {activeMediaForPlayer && (
         <VideoPlayer
           media={activeMediaForPlayer}
@@ -460,27 +589,15 @@ export default function App() {
         />
       )}
 
-      {/* Detailed Media Modal */}
-      {activeMediaForDetails && (
-        <MediaDetailModal
-          media={activeMediaForDetails}
-          allMedia={mediaList}
-          onClose={() => setActiveMediaForDetails(null)}
-          onPlay={handlePlayMedia}
-          onSelectMedia={handleOpenDetails}
-          onWatchlistChange={refreshUser}
-        />
-      )}
-
-      {/* Smart Search Modal */}
+      {/* Search Overlay */}
       <SearchModal
         isOpen={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         allMedia={mediaList}
-        onSelectMedia={handleOpenDetails}
+        onSelectMedia={navigateToMedia}
       />
 
-      {/* User Space Modal */}
+      {/* Personal Watchlist / History / Push Preferences Modal */}
       <UserSpaceModal
         isOpen={userSpaceOpen}
         onClose={() => {
@@ -489,17 +606,8 @@ export default function App() {
         }}
         allMedia={mediaList}
         onPlay={handlePlayMedia}
-        onOpenDetails={handleOpenDetails}
-        onOpenAdmin={() => setAdminModalOpen(true)}
+        onOpenDetails={navigateToMedia}
         initialTab={userSpaceInitialTab}
-      />
-
-      {/* Admin Panel Modal */}
-      <AdminModal
-        isOpen={adminModalOpen}
-        onClose={() => setAdminModalOpen(false)}
-        mediaList={mediaList}
-        onRefreshMedia={refreshCatalog}
       />
     </div>
   );

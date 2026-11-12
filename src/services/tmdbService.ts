@@ -1,5 +1,6 @@
 import { MediaItem, Season, Episode } from '../types';
 import { storageService } from './storageService';
+import { getActiveLocaleConfig } from '../utils/i18n';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
@@ -50,10 +51,11 @@ export const tmdbService = {
 
   async fetchApi<T>(endpoint: string, params: Record<string, string | number> = {}): Promise<T | null> {
     const apiKey = this.getApiKey();
+    const activeLocale = getActiveLocaleConfig();
 
     const queryParams: Record<string, string> = {
       api_key: apiKey,
-      language: 'fr-FR',
+      language: activeLocale.tmdbLang,
     };
 
     Object.entries(params).forEach(([k, v]) => {
@@ -129,14 +131,14 @@ export const tmdbService = {
     // Posters & Backdrops
     const poster = raw.poster_path
       ? `${TMDB_IMAGE_BASE}/w600_and_h900_bestv2${raw.poster_path}`
-      : 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80';
+      : '/images/fallback-poster.jpg';
 
     const backdrop = raw.backdrop_path
       ? `${TMDB_IMAGE_BASE}/original${raw.backdrop_path}`
-      : (raw.poster_path ? `${TMDB_IMAGE_BASE}/original${raw.poster_path}` : 'https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?auto=format&fit=crop&w=1920&q=80');
+      : (raw.poster_path ? `${TMDB_IMAGE_BASE}/original${raw.poster_path}` : '/images/fallback-backdrop.jpg');
 
     // Default trailers and videos
-    let trailerUrl = 'https://www.youtube.com/embed/Way9Dexny3w';
+    let trailerUrl = '';
     if (raw.videos?.results) {
       const trailer = raw.videos.results.find((v: any) => (v.type === 'Trailer' || v.type === 'Teaser') && v.site === 'YouTube');
       if (trailer) {
@@ -352,7 +354,7 @@ export const tmdbService = {
     return data.results.filter(r => r.poster_path).map(r => this.formatTmdbMedia(r, 'tv'));
   },
 
-  // 11. Multi Search Live
+  // 11. Multi Search Live (Titles + Actors via person.known_for + Genres)
   async searchMulti(query: string, page = 1): Promise<MediaItem[]> {
     if (!query.trim()) return [];
     const data = await this.fetchApi<{ results: any[] }>('/search/multi', {
@@ -360,9 +362,57 @@ export const tmdbService = {
       page,
     });
     if (!data?.results) return [];
-    return data.results
-      .filter((r: any) => r.poster_path && (r.media_type === 'movie' || r.media_type === 'tv'))
-      .map((r: any) => this.formatTmdbMedia(r, r.media_type));
+
+    const results: MediaItem[] = [];
+    const seen = new Set<string>();
+
+    const pushItem = (raw: any, type: 'movie' | 'tv') => {
+      const formatted = this.formatTmdbMedia(raw, type);
+      const key = String(formatted.id);
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(formatted);
+      }
+    };
+
+    data.results.forEach((r: any) => {
+      if ((r.media_type === 'movie' || r.media_type === 'tv') && r.poster_path) {
+        pushItem(r, r.media_type);
+      } else if (r.media_type === 'person' && Array.isArray(r.known_for)) {
+        r.known_for.forEach((kf: any) => {
+          if ((kf.media_type === 'movie' || kf.media_type === 'tv') && kf.poster_path) {
+            pushItem(kf, kf.media_type);
+          }
+        });
+      }
+    });
+
+    // If query matches a genre name, supplement with discover results
+    const matchedGenreEntry = Object.entries(GENRE_NAME_TO_ID).find(
+      ([name]) => name.toLowerCase() === query.trim().toLowerCase()
+    );
+    if (matchedGenreEntry && results.length < 8) {
+      const [gMovies, gSeries] = await Promise.all([
+        this.discoverMovies({ genreId: matchedGenreEntry[1], page: 1 }),
+        this.discoverSeries({ genreId: matchedGenreEntry[1], page: 1 }),
+      ]);
+      [...gMovies.slice(0, 6), ...gSeries.slice(0, 6)].forEach((item) => {
+        const key = String(item.id);
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(item);
+        }
+      });
+    }
+
+    return results;
+  },
+
+  async getSimilarMedia(type: 'movie' | 'tv', id: number | string): Promise<MediaItem[]> {
+    const cleanId = String(id).replace(/^(movie|tv)-/, '');
+    const data = await this.fetchApi<{ results: any[] }>(`/${type}/${cleanId}/similar`, { page: 1 });
+    if (!data?.results) return [];
+    return data.results.filter((r) => r.poster_path).slice(0, 8).map((r) => this.formatTmdbMedia(r, type));
   },
 
   // 12. Full Media Details (with Credits, Videos, Seasons)

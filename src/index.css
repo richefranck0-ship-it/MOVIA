@@ -8,10 +8,13 @@
     --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 
+  html,
   body {
     font-family: var(--font-sans);
     background-color: #08070d;
     color: #f3f3f7;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1, h2, h3, h4, h5, h6, .font-heading {
@@ -19,10 +22,19 @@
   }
 }
 
-/* Custom smooth dark scrollbar */
+/* Hide horizontal scrollbars while keeping smooth touch scrolling */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom smooth dark scrollbar for vertical page */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -38,22 +50,6 @@
   background: #7c3aed;
 }
 
-/* Subtle glow utilities */
-.glow-purple {
-  box-shadow: 0 0 35px -8px rgba(124, 58, 237, 0.45);
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-
-.glow-purple-sm {
-  box-shadow: 0 0 20px -5px rgba(124, 58, 237, 0.35);
-}
-
-.glow-subtle {
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
-}
-
-.text-gradient-purple {
-  background: linear-gradient(135deg, #ffffff 40%, #c084fc 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-

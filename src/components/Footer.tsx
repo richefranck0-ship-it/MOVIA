@@ -1,78 +1,92 @@
 import React from 'react';
-import { Film, Lock } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { ActiveTab } from '../types';
+import { ALL_LOCALE_LIST, getCurrentLang, getLocalizedPath } from '../utils/i18n';
 
 interface FooterProps {
   onNavigate: (tab: ActiveTab) => void;
-  onOpenAdmin: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenAdmin }) => {
+export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
   return (
-    <footer className="w-full bg-[#07060b] border-t border-purple-900/20 text-zinc-400 text-xs mt-16 py-12 px-4 md:px-8">
+    <footer className="w-full bg-[#07060b] border-t border-white/8 text-zinc-400 text-xs mt-12 pt-10 pb-24 md:pb-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
+              <img src="/icon.svg" alt="STREAMORA" className="w-6 h-6 rounded" />
               <span className="text-lg font-black tracking-wider text-white font-heading">
-                STREAM<span className="text-purple-500">ORA</span>
+                STREAM<span className="text-purple-400">ORA</span>
               </span>
             </div>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Plateforme moderne de streaming cinématographique. Découvrez, explorez et visionnez les plus grands classiques du cinéma mondial, les nouvelles séries et les flux directs.
+              Plateforme cinématographique moderne de films et séries. Découvrez les nouveautés, grands classiques et épisodes avec fiches détaillées et liens directs.
             </p>
           </div>
 
-          {/* Quick links */}
-          <div className="space-y-2">
+          {/* Navigation */}
+          <div className="space-y-2.5">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-white">Navigation</h4>
-            <ul className="space-y-1.5 text-xs">
+            <ul className="space-y-2 text-xs">
               <li>
-                <button onClick={() => onNavigate('home')} className="hover:text-purple-300 transition-colors">Accueil</button>
+                <button onClick={() => onNavigate('home')} className="hover:text-purple-300 transition-colors py-0.5">
+                  Accueil
+                </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('direct')} className="hover:text-purple-300 transition-colors">Chaînes & Direct</button>
+                <button onClick={() => onNavigate('movies')} className="hover:text-purple-300 transition-colors py-0.5">
+                  Films populaires &amp; Classiques
+                </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('movies')} className="hover:text-purple-300 transition-colors">Tous les Films</button>
+                <button onClick={() => onNavigate('series')} className="hover:text-purple-300 transition-colors py-0.5">
+                  Séries &amp; Épisodes
+                </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('series')} className="hover:text-purple-300 transition-colors">Toutes les Séries</button>
+                <button onClick={() => onNavigate('news')} className="hover:text-purple-300 transition-colors py-0.5">
+                  Nouveautés
+                </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('news')} className="hover:text-purple-300 transition-colors">Nouveautés Cinéma</button>
-              </li>
-              <li>
-                <button onClick={() => onNavigate('watchlist')} className="hover:text-purple-300 transition-colors">Ma Liste personnelle</button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Technical & Services */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-white">Services & Diffusion</h4>
-            <ul className="space-y-1.5 text-xs">
-              <li><span>Lecteur vidéo compatible MP4 & HLS</span></li>
-              <li><span>Recherche externe de sources</span></li>
-              <li><span>Flux en direct 24/7</span></li>
-              <li>
-                <button
-                  onClick={onOpenAdmin}
-                  className="text-zinc-500 hover:text-purple-400 flex items-center gap-1.5 transition-colors pt-2"
-                  title="Accès Technique Sécurisé"
-                >
-                  <Lock className="w-3 h-3" />
-                  <span>Espace Gestion</span>
+                <button onClick={() => onNavigate('direct')} className="hover:text-purple-300 transition-colors py-0.5">
+                  Chaînes &amp; Direct
                 </button>
               </li>
             </ul>
           </div>
 
+          {/* Partenariat & Services */}
+          <div className="space-y-2.5">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-white">Entreprise &amp; Partenariats</h4>
+            <ul className="space-y-2 text-xs">
+              <li>
+                <button
+                  onClick={() => onNavigate('partenariat')}
+                  className="text-purple-300 hover:text-purple-200 font-semibold transition-colors py-0.5"
+                >
+                  Partenariat et publicité
+                </button>
+              </li>
+              <li>
+                <button onClick={() => onNavigate('watchlist')} className="hover:text-purple-300 transition-colors py-0.5">
+                  Ma Liste personnelle
+                </button>
+              </li>
+              <li>
+                <span>Lecteur adaptatif mobile &amp; ordinateur</span>
+              </li>
+              <li>
+                <span>Application installable (PWA)</span>
+              </li>
+            </ul>
+          </div>
+
           {/* TMDB Official Attribution */}
-          <div className="space-y-2.5 bg-[#0e0c17] p-4 rounded-xl border border-white/5">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-white flex items-center gap-1.5">
-              <span>Attribution Légale TMDB</span>
+          <div className="space-y-2.5 bg-[#0e0c17] p-4 rounded-xl border border-white/8 h-fit">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-white">
+              Source Catalogue TMDB
             </h4>
             <div className="flex items-center gap-3">
               <img
@@ -87,14 +101,48 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenAdmin }) => {
           </div>
         </div>
 
-        <div className="pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-500">
-          <p>© {new Date().getFullYear()} STREAMORA — Tous droits réservés. Lecteur compatible MP4/HLS & flux autorisés.</p>
-          <div className="flex items-center gap-4">
-            <span>Qualité 4K HDR</span>
-            <span>·</span>
-            <span>Son Stéréo & 5.1</span>
-            <span>·</span>
-            <span>Sous-titres FR/VO</span>
+        {/* Bottom Legal, Signature & International Language Editions */}
+        <div className="pt-6 border-t border-white/8 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-400 text-center sm:text-left">
+            <p className="font-medium text-zinc-300">
+              © STREAMORA — Fait par Franck. Tous droits réservés.
+            </p>
+            <div className="flex items-center gap-3 text-[11px] text-zinc-500">
+              <button onClick={() => onNavigate('partenariat')} className="hover:text-purple-300 transition-colors">
+                Annonceurs &amp; Régie
+              </button>
+              <span aria-hidden="true">·</span>
+              <span>Mobile First</span>
+              <span aria-hidden="true">·</span>
+              <span>VF / VOSTFR / International</span>
+            </div>
+          </div>
+
+          {/* International SEO Language Switcher */}
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-[11px] text-zinc-500">
+            <span className="flex items-center gap-1 text-zinc-400 font-medium">
+              <Globe className="w-3.5 h-3.5 text-purple-400" />
+              <span>Langues :</span>
+            </span>
+            {ALL_LOCALE_LIST.map((loc) => {
+              const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
+              const activeLang = getCurrentLang();
+              const isCurrent = activeLang === loc.code;
+              return (
+                <a
+                  key={loc.code}
+                  href={getLocalizedPath(currentPath, loc.code)}
+                  hrefLang={loc.code}
+                  className={`px-2 py-1 rounded-md transition-colors ${
+                    isCurrent
+                      ? 'bg-purple-600/20 text-purple-300 font-semibold border border-purple-500/30'
+                      : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {loc.nativeLabel}
+                </a>
+              );
+            })}
           </div>
         </div>
       </div>

@@ -17,7 +17,7 @@ const DEFAULT_USER: UserProfile = {
   id: 'usr_default_cinema',
   username: 'Cinéphile',
   email: 'spectateur@streamora.tv',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+  avatar: '/images/app-icon.png',
   role: 'user',
   joinedDate: '2026-01-10',
   watchlist: ['dune-2', 'oppenheimer', 'breaking-bad'],
@@ -95,13 +95,28 @@ export const storageService = {
 
   // --- ADVERTISING BANNERS ---
   getAds(): AdBanner[] {
+    const legacyDemoIds = new Set([
+      'ad-nordvpn',
+      'ad-projector-video',
+      'ad-headphones',
+      'ad-sub-hero',
+      'ad-direct-sponsor',
+      'ad-footer-regie',
+    ]);
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ADS);
       if (!data) {
         localStorage.setItem(STORAGE_KEYS.ADS, JSON.stringify(INITIAL_ADS));
         return INITIAL_ADS;
       }
-      return JSON.parse(data);
+      const parsed: AdBanner[] = JSON.parse(data);
+      const cleaned = Array.isArray(parsed)
+        ? parsed.filter((ad) => !legacyDemoIds.has(ad.id))
+        : INITIAL_ADS;
+      if (cleaned.length !== (Array.isArray(parsed) ? parsed.length : 0)) {
+        localStorage.setItem(STORAGE_KEYS.ADS, JSON.stringify(cleaned));
+      }
+      return cleaned;
     } catch {
       return INITIAL_ADS;
     }
@@ -109,6 +124,9 @@ export const storageService = {
 
   saveAds(ads: AdBanner[]): void {
     localStorage.setItem(STORAGE_KEYS.ADS, JSON.stringify(ads));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('streamora-ads-updated'));
+    }
   },
 
   addAd(ad: Omit<AdBanner, 'id' | 'impressions' | 'clicks'>): AdBanner {

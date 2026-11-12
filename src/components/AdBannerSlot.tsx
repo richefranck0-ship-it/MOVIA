@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink, X, Sparkles, Play } from 'lucide-react';
 import { AdBanner, AdPlacement } from '../types';
 import { storageService } from '../services/storageService';
@@ -8,25 +8,71 @@ interface AdBannerSlotProps {
   className?: string;
 }
 
+const HtmlAdScriptContainer: React.FC<{ htmlCode: string }> = ({ htmlCode }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !htmlCode.trim()) return;
+    el.innerHTML = '';
+    try {
+      const range = document.createRange();
+      range.selectNode(el);
+      const fragment = range.createContextualFragment(htmlCode);
+      el.appendChild(fragment);
+    } catch {
+      el.innerHTML = htmlCode;
+    }
+  }, [htmlCode]);
+
+  return <div ref={containerRef} className="w-full flex items-center justify-center overflow-hidden" />;
+};
+
 export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ placement, className = '' }) => {
   const [ad, setAd] = useState<AdBanner | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const allAds = storageService.getAds().filter(a => a.isActive && a.placement === placement);
-    if (allAds.length > 0) {
-      const selected = allAds[Math.floor(Math.random() * allAds.length)];
-      setAd(selected);
-      storageService.recordAdImpression(selected.id);
-    }
+    const pickAd = () => {
+      const allAds = storageService.getAds().filter((a) => a.isActive && a.placement === placement);
+      if (allAds.length > 0) {
+        const selected = allAds[Math.floor(Math.random() * allAds.length)];
+        setAd(selected);
+        storageService.recordAdImpression(selected.id);
+      } else {
+        setAd(null);
+      }
+    };
+
+    pickAd();
+    const handleAdsUpdated = () => pickAd();
+    window.addEventListener('streamora-ads-updated', handleAdsUpdated);
+    return () => window.removeEventListener('streamora-ads-updated', handleAdsUpdated);
   }, [placement]);
 
   if (!ad || dismissed) return null;
 
   const handleClick = () => {
     storageService.recordAdClick(ad.id);
-    window.open(ad.targetUrl, '_blank', 'noopener,noreferrer');
+    if (ad.targetUrl) {
+      window.open(ad.targetUrl, '_blank', 'noopener,noreferrer');
+    }
   };
+
+  // Real Ad Network HTML/Script Tag Mode (Google AdSense, Adsterra, Monetag, PropellerAds...)
+  if (ad.mediaType === 'html' && ad.htmlCode) {
+    return (
+      <aside
+        aria-label={ad.badgeText || 'Publicité'}
+        className={`w-full my-4 rounded-2xl bg-[#0e0c18] border border-white/8 p-3 flex flex-col items-center justify-center relative overflow-hidden ${className}`}
+      >
+        <span className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5 self-start">
+          {ad.badgeText || 'Sponsorisé'}
+        </span>
+        <HtmlAdScriptContainer htmlCode={ad.htmlCode} />
+      </aside>
+    );
+  }
 
   const adMediaUrl = ad.mediaUrl || ad.imageUrl || '';
   const isVideo = ad.mediaType === 'video' || adMediaUrl.endsWith('.mp4') || adMediaUrl.endsWith('.webm');
@@ -77,7 +123,6 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ placement, className
     return (
       <aside aria-label="Sponsor" className={`w-full bg-[#110f1c] border border-purple-900/30 rounded-2xl p-4 my-4 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden group shadow-lg ${className}`}>
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full cursor-pointer" onClick={handleClick}>
-          {/* Video or Image Media */}
           {isVideo ? (
             <div className="w-full sm:w-48 h-28 rounded-xl overflow-hidden shrink-0 border border-purple-500/30 bg-black relative">
               <video
@@ -205,7 +250,6 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ placement, className
               <span>En savoir plus</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[11px] text-zinc-500">Lien partenaire sécurisé</span>
           </div>
         </div>
       </div>
